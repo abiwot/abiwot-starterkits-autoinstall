@@ -117,7 +117,7 @@ autoinstall:
         - chmod 600 /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d
         - chmod 644 /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d.pub
         - chmod 644 /home/user1/.ssh/config
-        - chown -R user1:user1 /home/yinyang/.ssh
+        - chown -R user1:user1 /home/user1/.ssh
         ## Populate SSH known_hosts
         - touch /home/user1/.ssh/known_hosts
         - ssh-keyscan -H mygitlab.yourdomain.com >> /home/user1/.ssh/known_hosts
