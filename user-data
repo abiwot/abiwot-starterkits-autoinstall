@@ -1,0 +1,132 @@
+#cloud-config
+autoinstall:
+  version: 1
+  refresh-installer:
+    update: true
+  updates: all
+  timezone: America/Toronto
+  locale: en_US.UTF-8
+  network:
+    version: 2
+    ethernets:
+      # Onboard NIC (referenced by MAC address)
+      # change the MAC address to match your system
+      onboard:
+        match:
+          macaddress: "<CHANGE ME>"
+        dhcp4: true
+        dhcp6: false
+      
+      # ThunderBolt dock (referenced by MAC address)
+      # this is for a external dock with a Nic used when the
+      # system is parked
+      # Change the MAC address to match your dock
+      thunderbolt:
+        match:
+          macaddress: "CHANGE ME"
+        dhcp4: false
+        addresses: [192.168.1.99/24] # static IP for the system when parked
+        routes:
+          - to: default
+            via: 192.168.1.1 # default gateway
+        nameservers:
+          addresses: [192.168.10.10, 192.168.8.1] # DNS servers that have the A/CNAME records to reach this system via network
+  keyboard:
+    layout: ca
+    toggle: null
+    variant: eng
+  packages:
+    - vim
+    - curl
+    - wget
+    - git
+    - htop
+    - unzip
+    - net-tools
+    - dnsutils
+    - python3-pip
+    - python3-venv
+    - build-essential
+    - software-properties-common
+  kernel:
+    flavor: hwe
+  drivers:
+    install: true
+  identity:
+    hostname: cdalapai01
+    username: user1
+    realname: user1
+    password: <CHANGE ME> # OS encrypted password via 'mkpasswd -m sha-512'
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - ssh-ed25519 <CHANGE ME - ssh key> user1@local
+  storage:
+    layout:
+      name: lvm
+      #match:
+      #  - nvme0n1
+      reset-partition: true
+      sizing-policy: all
+  late-commands:
+    # Set vim global defaults
+    - curtin in-target --target=/target -- mkdir -p /etc/vim
+    - curtin in-target --target=/target -- touch /etc/vim/vimrc.local
+    - curtin in-target --target=/target -- echo "set background=dark" >> /etc/vim/vimrc.local
+    - curtin in-target --target=/target -- echo "autocmd FileType * setlocal formatoptions-=c formatoptions-=r formatoptions-=o" >> /etc/vim/vimrc.local
+    # Install Desktop Environment
+    - curtin in-target --target=/target -- apt install -y ubuntu-desktop-minimal
+    # Install HP specific drivers
+    - curtin in-target --target=/target -- apt install -y fwupd hplip lm-sensors
+    # Install Intel GPU drivers
+    - curtin in-target --target=/target -- apt install -y mesa-utils intel-media-va-driver intel-gpu-tools libvulkan1 libvulkan-dev vulkan-tools libva-dev vainfo clinfo ocl-icd-opencl-dev
+    - curtin in-target --target=/target -- echo "export LIBVA_DRIVER_NAME=iHD" | sudo tee -a /etc/environment
+    - curtin in-target --target=/target -- echo "export VDPAU_DRIVER=va_gl" | sudo tee -a /etc/environment
+    # Enable Vulkan support
+    - curtin in-target --target=/target -- apt install -y mesa-vulkan-drivers
+  user-data:
+    #Post-Processing
+    runcmd:
+        # Configure user SSH keys - user1
+        ## Create SSH directory
+        - mkdir -p /home/user1/.ssh/gitlab
+        - chmod 700 /home/user1/.ssh/gitlab
+        ## Create SSH keys
+        - |
+          cat > /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d << 'EOL'
+          -----BEGIN OPENSSH PRIVATE KEY-----
+          <CHANGE ME - ssh key
+          -----END OPENSSH PRIVATE KEY-----
+          EOL
+        ## Create SSH public key
+        - |
+          cat > /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d.pub << 'EOL'
+          ssh-ed25519 <CHANGE ME - ssh key> git-readonly-access
+          EOL
+        ## Create SSH config file
+        - |
+          cat > /home/user1/.ssh/config << 'EOL'
+          Host gitlab
+            HostName mygitlab.yourdomain.com
+            User git-readonly-access
+            IdentityFile ~/.ssh/gitlab/gitlab_readonly_ed25519d
+            IdentitiesOnly yes
+          EOL
+        ## Set permissions
+        - chmod 600 /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d
+        - chmod 644 /home/user1/.ssh/gitlab/gitlab_readonly_ed25519d.pub
+        - chmod 644 /home/user1/.ssh/config
+        - chown -R user1:user1 /home/yinyang/.ssh
+        ## Populate SSH known_hosts
+        - touch /home/user1/.ssh/known_hosts
+        - ssh-keyscan -H mygitlab.yourdomain.com >> /home/user1/.ssh/known_hosts
+        - chmod 644 /home/user1/.ssh/known_hosts
+        - chown user1:user1 /home/user1/.ssh/known_hosts
+        # Install Brave browser
+        - curl -fsS https://dl.brave.com/install.sh -o /tmp/brave-install.sh
+        - chmod +x /tmp/brave-install.sh
+        - /tmp/brave-install.sh
+        # HP firmware update
+        - fwupdmgr refresh
+        - fwupdmgr update
